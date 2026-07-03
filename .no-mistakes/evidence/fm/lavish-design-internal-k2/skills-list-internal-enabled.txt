@@ -21,4 +21,3 @@
 
 │
 └  Use --skill <name> to install specific skills
-
