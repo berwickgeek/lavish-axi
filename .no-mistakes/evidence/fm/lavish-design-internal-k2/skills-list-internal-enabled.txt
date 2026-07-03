@@ -2,7 +2,7 @@
 │
 ●   codex  Agent detected — installing non-interactively
 [?25l│
-◇  Source: /Users/kunchen/.no-mistakes/worktrees/ea3c5e639a16/01KWMJ8S9NSSMZGTHVX2YEVYKW
+◇  Source: /Users/kunchen/.no-mistakes/worktrees/ea3c5e639a16/01KWMK1AWV938CW2TQ3FJ3VK77
 [?25h[?25l│
 ◇  Local path validated
 [?25h[?25l│
