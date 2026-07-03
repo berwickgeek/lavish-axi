@@ -72,6 +72,8 @@ let layoutGateTimer;
 const snapshotRequests = [];
 let endAfterSubmit = false;
 let workingBubble = null;
+let workingTimer = null;
+let workingStartAt = 0;
 let submitQueuedPromise = null;
 let submitQueuedAgain = false;
 let lastScroll = { x: 0, y: 0 };
@@ -143,8 +145,11 @@ function render() {
 }
 
 function updateSendState() {
-  sendButton.disabled = ended || agentPresence === "working";
-  sendCaret.disabled = ended || agentPresence === "working";
+  // Allow sending while the agent is working: feedback is queued server-side and
+  // delivered on the agent's next poll ("queued feedback is never lost"), so blocking
+  // the send here only drops the human's keystrokes on the floor.
+  sendButton.disabled = ended;
+  sendCaret.disabled = ended;
   sendFromMenuButton.disabled = sendButton.disabled;
 }
 
@@ -218,22 +223,107 @@ function syncChat(chat) {
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
+const rttStorageKey = "lavish-axi:rtt";
+
+function loadRtt() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(rttStorageKey) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((n) => typeof n === "number" && n > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
+function recordRtt(ms) {
+  if (!(ms > 0)) return;
+  try {
+    const list = loadRtt();
+    list.push(ms);
+    while (list.length > 30) list.shift();
+    localStorage.setItem(rttStorageKey, JSON.stringify(list));
+  } catch {
+    // storage unavailable — the estimate just won't persist across sessions
+  }
+}
+
+// Median of recent round trips; 0 until we have enough samples to be honest.
+function rttEstimateMs() {
+  const list = loadRtt();
+  if (list.length < 3) return 0;
+  const sorted = [...list].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+function formatSecs(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return s + "s";
+  return Math.floor(s / 60) + "m " + (s % 60) + "s";
+}
+
+function startWorkingTimer() {
+  stopWorkingTimer();
+  updateWorkingBubble();
+  workingTimer = setInterval(updateWorkingBubble, 500);
+}
+
+function stopWorkingTimer() {
+  if (workingTimer) {
+    clearInterval(workingTimer);
+    workingTimer = null;
+  }
+}
+
+function updateWorkingBubble() {
+  if (!workingBubble || !workingStartAt) return;
+  const elapsed = Date.now() - workingStartAt;
+  const est = rttEstimateMs();
+  const elapsedEl = workingBubble.querySelector(".working-elapsed");
+  const estEl = workingBubble.querySelector(".working-est");
+  const bar = workingBubble.querySelector(".working-bar");
+  const fill = bar ? bar.querySelector("i") : null;
+  if (elapsedEl) elapsedEl.textContent = formatSecs(elapsed);
+  if (est > 0) {
+    if (bar) bar.classList.remove("indeterminate");
+    if (estEl) estEl.textContent = "~" + formatSecs(est) + " typical";
+    if (fill) fill.style.width = Math.min(100, (elapsed / est) * 100) + "%";
+    if (bar) bar.classList.toggle("over", elapsed > est * 1.15);
+  } else {
+    if (estEl) estEl.textContent = "";
+    if (bar) bar.classList.add("indeterminate");
+  }
+}
+
 function setAgentPresence(state) {
   agentPresence = state === "listening" || state === "working" ? state : "waiting";
   updateSendState();
   if (presenceBanner) presenceBanner.hidden = ended || agentPresence !== "waiting";
 
   if (agentPresence !== "working") {
+    if (workingStartAt) {
+      recordRtt(Date.now() - workingStartAt);
+      workingStartAt = 0;
+    }
+    stopWorkingTimer();
     if (workingBubble) workingBubble.remove();
     workingBubble = null;
     return;
   }
 
   if (!workingBubble) {
+    workingStartAt = Date.now();
     workingBubble = document.createElement("div");
     workingBubble.className = "bubble agent agent-working";
-    workingBubble.innerHTML = '<span class="spinner"></span><span>Working...</span>';
+    workingBubble.innerHTML =
+      '<span class="spinner"></span>' +
+      '<div class="working-body">' +
+      '<div class="working-line"><span class="working-label">Working</span>' +
+      '<span class="working-elapsed">0s</span>' +
+      '<span class="working-est"></span></div>' +
+      '<div class="working-bar indeterminate"><i></i></div>' +
+      "</div>";
     chatLog.appendChild(workingBubble);
+    startWorkingTimer();
   }
   chatLog.scrollTop = chatLog.scrollHeight;
 }
@@ -285,7 +375,7 @@ function requestSnapshot(action) {
 }
 
 function sendQueued(endAfter) {
-  if (ended || agentPresence === "working") return;
+  if (ended) return;
   closeMenus();
 
   const text = chatInput.value.trim();

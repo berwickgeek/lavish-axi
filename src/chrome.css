@@ -699,6 +699,63 @@ body.lavish {
     transform: rotate(360deg);
   }
 }
+.working-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.working-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+}
+.working-label {
+  color: var(--fg-muted);
+}
+.working-elapsed {
+  color: var(--fg);
+  font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums;
+}
+.working-est {
+  color: var(--fg-faint);
+  font-size: 11px;
+  margin-left: auto;
+}
+.working-bar {
+  position: relative;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--border);
+  overflow: hidden;
+}
+.working-bar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width 0.4s ease;
+}
+.working-bar.over i {
+  background: var(--danger);
+}
+.working-bar.indeterminate i {
+  width: 40%;
+  transition: none;
+  animation: working-slide 1.1s ease-in-out infinite;
+}
+@keyframes working-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
 .composer {
   display: grid;
   gap: 8px;
