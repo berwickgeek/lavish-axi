@@ -430,7 +430,7 @@ test("overflow menu offers a standalone HTML export that downloads a portable fi
   assert.match(html, /id="exportArtifact"[^<]*>.*Export standalone HTML/);
   assert.match(js, /const exportArtifactButton/);
   assert.match(js, /async function exportArtifact/);
-  assert.match(js, /fetch\("\/api\/" \+ key \+ "\/export"\)/);
+  assert.match(js, /fetch\(basePath \+ "\/api\/" \+ key \+ "\/export"\)/);
   assert.match(js, /link\.download = exportFileName\(\)/);
   assert.match(js, /exportArtifactButton\.onclick = exportArtifact/);
 });
@@ -464,7 +464,7 @@ test("overflow menu offers publishing an ht-ml.app link via a share dialog", asy
   assert.match(css, /\.share-result\[hidden\]\{display:none;?\}/);
   assert.match(js, /const shareArtifactButton/);
   assert.match(js, /async function publishShare/);
-  assert.match(js, /fetch\("\/api\/" \+ key \+ "\/share"/);
+  assert.match(js, /fetch\(basePath \+ "\/api\/" \+ key \+ "\/share"/);
   assert.match(js, /shareUrlInput\.value = data\.url/);
   assert.match(js, /shareUpdateKeyInput\.value = data\.update_key/);
 });
@@ -547,21 +547,29 @@ test("chrome can sync persisted chat after the event stream reconnects", async (
   assert.match(js, /function syncChat/);
 });
 
-test("chrome shows agent working state when a previous poll has released", async () => {
+test("chrome shows agent working state with a live elapsed timer and progress bar", async () => {
   const js = await chromeClientSource();
 
   assert.match(js, /agent-presence/);
-  assert.match(js, /Working\.\.\./);
+  assert.match(js, /class="working-elapsed"/);
+  assert.match(js, /class="working-bar/);
   assert.match(js, /spinner/);
+  // A live elapsed counter and a median round-trip estimate replace the static text.
+  assert.match(js, /function updateWorkingBubble\(\)/);
+  assert.match(js, /function rttEstimateMs\(\)/);
+  assert.match(js, /typical/);
 });
 
-test("chrome disables sending only while working or ended", async () => {
+test("chrome keeps sending enabled while working, disabled only when ended", async () => {
   const js = await chromeClientSource();
 
   assert.match(js, /let agentPresence = "waiting"/);
   assert.match(js, /function updateSendState\(\)/);
-  assert.match(js, /sendButton\.disabled = ended \|\| agentPresence === "working"/);
-  assert.match(js, /sendCaret\.disabled = ended \|\| agentPresence === "working"/);
+  assert.match(js, /sendButton\.disabled = ended;/);
+  assert.match(js, /sendCaret\.disabled = ended;/);
+  // The old block-while-working behaviour must be gone: feedback is queued and
+  // delivered on the next poll, so the composer stays usable during an agent turn.
+  assert.doesNotMatch(js, /sendButton\.disabled = ended \|\| agentPresence === "working"/);
   assert.doesNotMatch(js, /hasContent/);
 });
 
@@ -603,7 +611,7 @@ test("send and end submits queued prompts before ending the session", async () =
 test("chrome only marks session ended after the end request succeeds", async () => {
   const js = await chromeClientSource();
 
-  assert.match(js, /const response = await fetch\("\/api\/" \+ key \+ "\/end", \{ method: "POST" \}\)/);
+  assert.match(js, /const response = await fetch\(basePath \+ "\/api\/" \+ key \+ "\/end", \{ method: "POST" \}\)/);
   assert.match(js, /if \(!response\.ok\) throw new Error\("failed to end session"\)/);
   assert.match(js, /if \(!response\.ok\) throw new Error\("failed to end session"\);\n {2}markSessionEnded\(\)/);
 });
@@ -764,11 +772,24 @@ test("chrome keeps queued prompts persisted until submit succeeds", async () => 
   const js = await chromeClientSource();
 
   assert.doesNotMatch(js, /const prompts = queued\.splice\(0, queued\.length\)/);
-  assert.match(js, /await fetch\("\/api\/" \+ key \+ "\/prompts", \{/);
+  assert.match(js, /await fetch\(basePath \+ "\/api\/" \+ key \+ "\/prompts", \{/);
   assert.doesNotMatch(js, /queued\.splice\(0, prompts\.length\)/);
   assert.match(js, /for \(const prompt of prompts\) \{/);
   assert.match(js, /const index = queued\.indexOf\(prompt\)/);
   assert.match(js, /if \(index !== -1\) queued\.splice\(index, 1\)/);
+});
+
+test("chrome threads a configurable base path through every emitted URL", async () => {
+  const js = await chromeClientSource();
+  const html = createChromeHtml({ key: "abc", file: "/tmp/artifact.html" });
+
+  // Client reads the prefix from session data and applies it to all requests.
+  assert.match(js, /const basePath = String\(sessionData\.basePath \|\| ""\)/);
+  assert.match(js, /new EventSource\(basePath \+ "\/events\/" \+ key\)/);
+  assert.match(js, /fetch\(basePath \+ "\/api\/" \+ key \+ "\/prompts"/);
+  assert.match(js, /fetch\(basePath \+ "\/health"/);
+  // Server injects basePath into session data and emits it as a JSON field.
+  assert.match(html, /"basePath"/);
 });
 
 test("chrome ignores concurrent queued prompt submits", async () => {
@@ -1045,7 +1066,7 @@ test("/chrome-client.js serves the extracted chrome client script", async () => 
     assert.equal(res.status, 200);
     assert.match(res.headers.get("content-type") || "", /application\/javascript/);
     assert.match(body, /const sessionData/);
-    assert.match(body, /new EventSource\("\/events\/" \+ key\)/);
+    assert.match(body, /new EventSource\(basePath \+ "\/events\/" \+ key\)/);
   } finally {
     await server.close();
     await rm(dir, { recursive: true, force: true });

@@ -7,6 +7,9 @@ const filePath = String(sessionData.file || "");
 const queueStorageKey = "lavish-axi:queued:" + key;
 const internalQueueKeyField = "_lavishQueueKey";
 const initialChat = Array.isArray(sessionData.initialChat) ? sessionData.initialChat : [];
+// Prefix for every URL we request, set when Lavish is served behind a path (e.g.
+// the launcher proxies /lavish/*). Empty for standalone serving.
+const basePath = String(sessionData.basePath || "");
 
 const frame = /** @type {HTMLIFrameElement} */ (document.getElementById("artifact"));
 const annotationPills = /** @type {HTMLDivElement} */ (document.getElementById("annotationPills"));
@@ -434,7 +437,7 @@ async function submitQueuedOnce() {
   const shouldEndSession = endAfterSubmit;
   const body = { prompts: prompts.map(stripInternalPromptFields), domSnapshot: pendingSnapshot };
   if (shouldEndSession) body.endSession = true;
-  const response = await fetch("/api/" + key + "/prompts", {
+  const response = await fetch(basePath + "/api/" + key + "/prompts", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -562,7 +565,7 @@ function initializeLayoutGate() {
 }
 
 async function submitLayoutWarnings(layoutWarnings) {
-  const response = await fetch("/api/" + key + "/layout-warnings", {
+  const response = await fetch(basePath + "/api/" + key + "/layout-warnings", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ layout_warnings: normalizeLayoutWarningsPayload(layoutWarnings) }),
@@ -572,7 +575,7 @@ async function submitLayoutWarnings(layoutWarnings) {
 
 async function endSession() {
   if (ended) return;
-  const response = await fetch("/api/" + key + "/end", { method: "POST" });
+  const response = await fetch(basePath + "/api/" + key + "/end", { method: "POST" });
   if (!response.ok) throw new Error("failed to end session");
   markSessionEnded();
 }
@@ -640,7 +643,7 @@ async function exportArtifact() {
   exportArtifactButton.disabled = true;
   setExportLabel("Exporting...");
   try {
-    const response = await fetch("/api/" + key + "/export");
+    const response = await fetch(basePath + "/api/" + key + "/export");
     if (!response.ok) throw new Error("export failed");
     const warningCount = Number(response.headers.get("x-lavish-export-warning-count") || "0");
     const noticeCount = Number(response.headers.get("x-lavish-export-notice-count") || "0");
@@ -697,7 +700,7 @@ async function publishShare(event) {
   const password = sharePasswordInput.value.trim();
   const passwordProtected = Boolean(password);
   try {
-    const response = await fetch("/api/" + key + "/share", {
+    const response = await fetch(basePath + "/api/" + key + "/share", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(password ? { password } : {}),
@@ -751,7 +754,7 @@ async function reloadAfterServerRestart() {
 
   while (Date.now() < deadline) {
     try {
-      const res = await fetch("/health", { cache: "no-store" });
+      const res = await fetch(basePath + "/health", { cache: "no-store" });
       if (sawOutage && res.ok) {
         location.reload();
         return;
@@ -852,7 +855,7 @@ frame.addEventListener("load", () => {
 
 initializeLayoutGate();
 
-const events = new EventSource("/events/" + key);
+const events = new EventSource(basePath + "/events/" + key);
 events.addEventListener("reload", () => resetFrame());
 events.addEventListener("chrome-reload", () => reloadAfterServerRestart());
 events.addEventListener("agent-reply", (event) => addChat("agent", JSON.parse(event.data).text));
