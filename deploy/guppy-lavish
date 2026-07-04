@@ -21,6 +21,10 @@ HOSTNAME_TS=guppy.tail72863e.ts.net
 export LAVISH_AXI_HOST=127.0.0.1
 export LAVISH_AXI_PORT="$PORT"
 export LAVISH_AXI_LINK_HOST="$HOSTNAME_TS"
+# Match the warm systemd server: if this wrapper ever spawns a server (e.g. during a
+# restart window), it must be base-path aware too, or it emits root URLs the launcher
+# /lavish proxy can't serve.
+export LAVISH_AXI_BASE_PATH=/lavish
 
 # rewrite Lavish's http://host:7803/lavish/... into the launcher origin https://host/lavish/...
 rewrite() { sed -E "s#http://${HOSTNAME_TS}:${PORT}#https://${HOSTNAME_TS}#g"; }
