@@ -1,136 +1,42 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createTelemetryClient, resolveTelemetryConfig } from "../src/telemetry.js";
+import {
+  createTelemetryClient,
+  resolveTelemetryConfig,
+  initDefaultTelemetry,
+  getDefaultTelemetry,
+} from "../src/telemetry.js";
 
-function createFetchSpy(options = {}) {
-  const requests = [];
-  let release = () => {};
-  const fetch = async (url, init = {}) => {
-    if (options.throws) throw options.throws;
-    const headers = {};
-    for (const [key, value] of Object.entries(init.headers || {})) {
-      headers[key] = value;
-    }
-    requests.push({
-      url: String(url),
-      method: init.method || "GET",
-      headers,
-      body: init.body ? JSON.parse(init.body) : undefined,
-    });
-    if (options.delayMs !== undefined) {
-      await new Promise((resolve) => {
-        const timer = setTimeout(resolve, options.delayMs);
-        timer.unref?.();
-        release = () => {
-          clearTimeout(timer);
-          resolve();
-        };
-      });
-    }
-    return new Response(null, { status: 200 });
-  };
-  return { fetch, requests, release };
-}
+// The Guppy fork strips telemetry: no endpoint, no HTTP client, no phone-home.
 
-test("telemetry can be disabled by environment", () => {
-  const config = resolveTelemetryConfig({
-    env: { LAVISH_AXI_TELEMETRY: "0" },
-    buildHost: "https://build.example",
-    buildWebsiteID: "build-id",
+test("resolveTelemetryConfig always reports telemetry disabled", () => {
+  // Even fully "configured", the fork never enables it.
+  const configured = resolveTelemetryConfig({
+    env: { LAVISH_AXI_UMAMI_WEBSITE_ID: "abc", LAVISH_AXI_UMAMI_HOST: "https://analytics.example" },
+    buildHost: "https://analytics.example",
+    buildWebsiteID: "abc",
   });
+  assert.equal(configured.enabled, false);
+  assert.equal(configured.host, "");
+  assert.equal(configured.websiteID, "");
 
-  assert.equal(config.enabled, false);
+  assert.equal(resolveTelemetryConfig({ env: {} }).enabled, false);
 });
 
-test("telemetry uses env values before build-time defaults", () => {
-  const config = resolveTelemetryConfig({
-    env: {
-      LAVISH_AXI_UMAMI_HOST: " https://env.example ",
-      LAVISH_AXI_UMAMI_WEBSITE_ID: " env-id ",
-    },
-    buildHost: "https://build.example",
-    buildWebsiteID: "build-id",
-  });
-
-  assert.deepEqual(config, {
-    enabled: true,
-    host: "https://env.example",
-    websiteID: "env-id",
-  });
+test("telemetry clients are no-ops that never touch the network or throw", async () => {
+  // createTelemetryClient ignores any "enabled" config — always a no-op.
+  const client = createTelemetryClient({ enabled: true, host: "https://ignored.example", websiteID: "abc" });
+  client.pageview("/open", { command: "open" });
+  client.track("command", { command: "open", status: "success" });
+  await client.close(1_000);
+  assert.ok(true, "no-op client did not throw");
 });
 
-test("telemetry disables when no website id is configured", () => {
-  const config = resolveTelemetryConfig({
-    env: {},
-    buildHost: "https://build.example",
-    buildWebsiteID: "",
-  });
-
-  assert.equal(config.enabled, false);
-});
-
-test("telemetry sends anonymous Umami event payloads", async () => {
-  const { fetch, requests } = createFetchSpy();
-  const client = createTelemetryClient({
-    enabled: true,
-    host: "https://a.example.com/umami/",
-    websiteID: "site-1",
-    app: "lavish-axi",
-    version: "1.2.3",
-    platform: "darwin",
-    arch: "arm64",
-    fetch,
-  });
-
-  client.track("command", { command: "poll", status: "success" });
-  await client.close(500);
-
-  assert.equal(requests.length, 1);
-  assert.equal(requests[0].url, "https://a.example.com/umami/api/send");
-  assert.equal(requests[0].method, "POST");
-  assert.equal(requests[0].headers["Content-Type"], "application/json");
-  assert.match(requests[0].headers["User-Agent"], /^lavish-axi\/1\.2\.3 telemetry$/);
-  assert.deepEqual(requests[0].body.payload.website, "site-1");
-  assert.deepEqual(requests[0].body.payload.hostname, "cli");
-  assert.deepEqual(requests[0].body.payload.title, "Lavish Editor CLI");
-  assert.deepEqual(requests[0].body.payload.url, "app://lavish-axi/command");
-  assert.deepEqual(requests[0].body.payload.name, "command");
-  assert.deepEqual(requests[0].body.payload.data.command, "poll");
-  assert.deepEqual(requests[0].body.payload.data.status, "success");
-  assert.deepEqual(requests[0].body.payload.data.platform, "darwin");
-  assert.deepEqual(requests[0].body.payload.data.arch, "arm64");
-  assert.deepEqual(requests[0].body.payload.data.version, "1.2.3");
-  assert.equal(typeof requests[0].body.payload.timestamp, "number");
-});
-
-test("telemetry is best effort and never throws fetch failures", async () => {
-  const client = createTelemetryClient({
-    enabled: true,
-    host: "https://a.example.com",
-    websiteID: "site-1",
-    app: "lavish-axi",
-    version: "1.0.0",
-    fetch: createFetchSpy({ throws: new Error("network down") }).fetch,
-  });
-
-  assert.doesNotThrow(() => client.track("command", {}));
-  await assert.doesNotReject(() => client.close(500));
-});
-
-test("telemetry close waits only up to the requested timeout", async () => {
-  const { fetch, requests, release } = createFetchSpy({ delayMs: 10_000 });
-  const client = createTelemetryClient({
-    enabled: true,
-    host: "https://a.example.com",
-    websiteID: "site-1",
-    app: "lavish-axi",
-    version: "1.0.0",
-    fetch,
-  });
-
-  client.track("command", {});
-  await client.close(20);
-  assert.equal(requests.length, 1);
-  release();
+test("initDefaultTelemetry returns a usable no-op client", async () => {
+  const client = initDefaultTelemetry({ env: { LAVISH_AXI_UMAMI_WEBSITE_ID: "abc" } });
+  client.pageview("/design");
+  client.track("command", { command: "design" });
+  await client.close(10);
+  assert.equal(getDefaultTelemetry(), client);
 });

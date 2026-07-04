@@ -15,8 +15,7 @@ await esbuild.build({
   format: "esm",
   target: "node22",
   define: {
-    "process.env.LAVISH_AXI_BUILD_UMAMI_HOST": JSON.stringify(process.env.LAVISH_AXI_UMAMI_HOST || ""),
-    "process.env.LAVISH_AXI_BUILD_UMAMI_WEBSITE_ID": JSON.stringify(process.env.LAVISH_AXI_UMAMI_WEBSITE_ID || ""),
+    // Telemetry is stripped in the Guppy fork — no Umami host/website-id is baked in.
     "process.env.LAVISH_AXI_BUILD_VERSION": JSON.stringify(packageJson.version),
   },
 });
