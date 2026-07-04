@@ -10,6 +10,7 @@
 # Usage:
 #   guppy-lavish <file.html>          open/resume a session, print the tailnet URL
 #   guppy-lavish poll <file.html>     long-poll for the user's annotations (leave running)
+#   guppy-lavish note <file.html> "…" post a live progress step to the "Working" indicator
 #   guppy-lavish end  <file.html>     end the session as the agent
 #   guppy-lavish stop                 shut the background server down
 #   guppy-lavish kit                  print the Guppy Plan Kit (inline CSS + decision JS)
@@ -37,10 +38,10 @@ case "$cmd" in
     # The Guppy Plan Kit: inline CSS + decision-widget JS, single-sourced from the fork.
     # Paste the CSS into <head> and the JS before </body>; build with gk- classes.
     node -e "import('${FORK_DIR}/src/guppy-plan-kit.js').then(m=>process.stdout.write(m.GUPPY_PLAN_KIT_CSS+'\n'+m.GUPPY_PLAN_KIT_DECISION_JS+'\n'))" ;;
-  poll|end|stop|export|share|playbook|design|update)
+  poll|note|end|stop|export|share|playbook|design|update)
     exec lavish-axi "$@" 2> >(rewrite >&2) | rewrite ;;
   ""|-h|--help)
-    echo "usage: guppy-lavish <file.html> | poll <file.html> | end <file.html> | stop | kit"; exit 0 ;;
+    echo "usage: guppy-lavish <file.html> | poll <file.html> | note <file.html> \"…\" | end <file.html> | stop | kit"; exit 0 ;;
   *)
     lavish-axi --no-open "$@" | rewrite ;;
 esac

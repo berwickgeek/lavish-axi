@@ -92,9 +92,17 @@ export async function serve({
   const app = express();
   const store = new SessionStore(stateFile);
   const events = new EventEmitter();
+  // One hub emitter fans out to every SSE client (reload/agent-reply/agent-presence/agent-note)
+  // and every active poll (feedback/ended); the listener count scales with connections, not code,
+  // so lift the default 10-listener cap to avoid spurious MaxListenersExceededWarning.
+  events.setMaxListeners(0);
   const watchers = new Map();
   const activePolls = new Map();
   const deliveredFeedback = new Set();
+  // Ephemeral per-session progress notes the agent posts mid-turn (`agent-note`). In-memory only:
+  // they narrate the current "working" span and are reset when a new span begins, so there is no
+  // reason to persist them to the session store. Keyed by session key → [{ text, at }].
+  const workingNotes = new Map();
   const sseClients = new Set();
   const verbose = debug || process.env.LAVISH_AXI_DEBUG === "1";
   const writeLog = typeof log === "function" ? log : (line) => process.stderr.write(`${line}\n`);
@@ -176,7 +184,10 @@ export async function serve({
         req.query.timeoutMs === undefined ? null : Math.max(0, Math.min(Number(req.query.timeoutMs || 0), 2147483647));
       const immediate = await store.takeFeedback(key);
       if (immediate.status !== "waiting") {
-        if (immediate.status === "feedback") markFeedbackDelivered(key, activePolls, deliveredFeedback, events);
+        if (immediate.status === "feedback") {
+          workingNotes.delete(key); // fresh working span begins — clear prior turn's notes
+          markFeedbackDelivered(key, activePolls, deliveredFeedback, events);
+        }
         res.json(immediate);
         return;
       }
@@ -210,7 +221,10 @@ export async function serve({
         responding = true;
         try {
           const result = await store.takeFeedback(key);
-          if (result.status === "feedback") markFeedbackDelivered(key, activePolls, deliveredFeedback, events);
+          if (result.status === "feedback") {
+            workingNotes.delete(key); // fresh working span begins — clear prior turn's notes
+            markFeedbackDelivered(key, activePolls, deliveredFeedback, events);
+          }
           if (streamHeartbeat) {
             res.end(JSON.stringify(result));
           } else {
@@ -278,6 +292,7 @@ export async function serve({
   app.post("/api/:key/end", async (req, res, next) => {
     try {
       await store.endSession(req.params.key, "user");
+      workingNotes.delete(req.params.key);
       clearFeedbackDelivery(req.params.key, activePolls, deliveredFeedback, events);
       events.emit("ended", req.params.key);
       res.json({ status: "ended" });
@@ -297,6 +312,35 @@ export async function serve({
       }
       events.emit("agent-reply", req.params.key, text);
       res.json({ status: "sent" });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Live progress narration: the agent posts a short step ("Pricing flights…") while it works on
+  // delivered feedback, so the browser's "Working" bubble shows real steps instead of an inferred
+  // spinner. Notes are ephemeral (in-memory, reset each working span) and never touch presence -
+  // the agent is already "working" here; this only enriches what the user sees during that span.
+  app.post("/api/:key/agent-note", async (req, res, next) => {
+    try {
+      const key = req.params.key;
+      const session = await store.findByKey(key);
+      if (!session) {
+        res.status(404).json({ error: "session not found" });
+        return;
+      }
+      const text = String(req.body?.text || "").trim();
+      if (!text) {
+        res.status(400).json({ error: "note text is required" });
+        return;
+      }
+      const note = { text: text.slice(0, 280), at: new Date().toISOString() };
+      const list = workingNotes.get(key) || [];
+      list.push(note);
+      while (list.length > 12) list.shift(); // keep the tail; the bubble shows recent steps
+      workingNotes.set(key, list);
+      events.emit("agent-note", key, note);
+      res.json({ status: "noted" });
     } catch (error) {
       next(error);
     }
@@ -379,6 +423,7 @@ export async function serve({
       const file = await canonicalFile(req.body.file);
       const key = sessionKey(file);
       await store.endSession(key, "agent");
+      workingNotes.delete(key);
       clearFeedbackDelivery(key, activePolls, deliveredFeedback, events);
       events.emit("ended", key);
       res.json({ status: "ended" });
@@ -467,18 +512,31 @@ export async function serve({
           res.write(`event: agent-presence\ndata: ${JSON.stringify({ state })}\n\n`);
         }
       };
+      const sendNote = (key, note) => {
+        if (key === req.params.key) {
+          res.write(`event: agent-note\ndata: ${JSON.stringify(note)}\n\n`);
+        }
+      };
       res.write(`event: chat-sync\ndata: ${JSON.stringify({ chat: session?.chat || [] })}\n\n`);
       res.write(
         `event: agent-presence\ndata: ${JSON.stringify({ state: computePresence(req.params.key, activePolls, deliveredFeedback) })}\n\n`,
       );
+      // Replay the current working span's notes so a browser that reconnects mid-turn (reload,
+      // network blip) still shows the steps already posted, not an empty spinner.
+      const existingNotes = workingNotes.get(req.params.key) || [];
+      if (existingNotes.length > 0) {
+        res.write(`event: agent-notes\ndata: ${JSON.stringify({ notes: existingNotes })}\n\n`);
+      }
       events.on("reload", sendReload);
       events.on("agent-reply", sendAgentReply);
       events.on("agent-presence", sendPresence);
+      events.on("agent-note", sendNote);
       req.on("close", () => {
         sseClients.delete(res);
         events.off("reload", sendReload);
         events.off("agent-reply", sendAgentReply);
         events.off("agent-presence", sendPresence);
+        events.off("agent-note", sendNote);
         refreshIdleTimer();
       });
     } catch (error) {

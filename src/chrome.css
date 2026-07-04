@@ -677,7 +677,7 @@ body.lavish {
 }
 .bubble.agent-working {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   color: var(--fg-muted);
 }
@@ -728,10 +728,39 @@ body.lavish {
   font-weight: var(--w-bold);
   font-variant-numeric: tabular-nums;
 }
-.working-est {
+.working-notes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.working-note {
+  position: relative;
+  padding-left: 14px;
+  font-size: 12px;
+  line-height: 1.35;
   color: var(--fg-faint);
-  font-size: 11px;
-  margin-left: auto;
+  overflow-wrap: anywhere;
+}
+.working-note::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 8px;
+  width: 4px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--border);
+}
+/* The latest step is what the agent is doing right now — give it full weight and an accent dot. */
+.working-note:last-child {
+  color: var(--fg);
+}
+.working-note:last-child::before {
+  background: var(--accent);
 }
 .working-bar {
   position: relative;

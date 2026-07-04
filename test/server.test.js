@@ -595,17 +595,23 @@ test("chrome can sync persisted chat after the event stream reconnects", async (
   assert.match(js, /function syncChat/);
 });
 
-test("chrome shows agent working state with a live elapsed timer and progress bar", async () => {
+test("chrome shows agent working state with a live elapsed timer and narrated progress steps", async () => {
   const js = await chromeClientSource();
 
   assert.match(js, /agent-presence/);
   assert.match(js, /class="working-elapsed"/);
-  assert.match(js, /class="working-bar/);
+  assert.match(js, /class="working-bar/); // indeterminate placeholder until the first real step
   assert.match(js, /spinner/);
-  // A live elapsed counter and a median round-trip estimate replace the static text.
   assert.match(js, /function updateWorkingBubble\(\)/);
-  assert.match(js, /function rttEstimateMs\(\)/);
-  assert.match(js, /typical/);
+  // Real progress: agent-posted notes narrate live steps in place of an inferred ETA.
+  assert.match(js, /class="working-notes"/);
+  assert.match(js, /function renderWorkingNotes\(\)/);
+  assert.match(js, /function addWorkingNote\(/);
+  assert.match(js, /events\.addEventListener\("agent-note"/);
+  assert.match(js, /events\.addEventListener\("agent-notes"/);
+  // The dishonest round-trip ETA guess is gone.
+  assert.doesNotMatch(js, /rttEstimateMs/);
+  assert.doesNotMatch(js, /typical/);
 });
 
 test("chrome keeps sending enabled while working, disabled only when ended", async () => {
@@ -2031,6 +2037,107 @@ test("SSE handshake reports waiting on a fresh session that never had a poll", a
     }
     controller.abort();
     assert.equal(state, "waiting");
+  } finally {
+    await server.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("agent-note posts live progress steps over SSE and replays them on reconnect", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const artifact = path.join(dir, "artifact.html");
+  await writeFile(artifact, "<!doctype html><html><body></body></html>");
+  const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
+
+  // Reads named SSE events off one stream, one at a time, with a short deadline.
+  const openStream = async (base, key) => {
+    const controller = new AbortController();
+    const res = await fetch(`${base}/events/${key}`, { signal: controller.signal });
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    return {
+      async waitFor(eventName) {
+        const deadline = Date.now() + 1000;
+        const re = new RegExp(`^event: ${eventName}\\ndata: (.+)\\n\\n`, "m");
+        while (true) {
+          const match = buffer.match(re);
+          if (match) {
+            buffer = buffer.replace(match[0], "");
+            return JSON.parse(match[1]);
+          }
+          const remaining = Math.max(1, deadline - Date.now());
+          const { value, done } = await Promise.race([
+            reader.read(),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error(`timed out waiting for ${eventName}`)), remaining),
+            ),
+          ]);
+          if (done) throw new Error(`stream closed before ${eventName}`);
+          buffer += decoder.decode(value, { stream: true });
+        }
+      },
+      close() {
+        controller.abort();
+        return reader.cancel().catch(() => {});
+      },
+    };
+  };
+
+  try {
+    const base = `http://127.0.0.1:${server.port}`;
+    const open = await fetch(`${base}/api/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ file: artifact }),
+    });
+    const { key } = await open.json();
+
+    const streamA = await openStream(base, key);
+
+    const posted = await fetch(`${base}/api/${key}/agent-note`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "Pricing flights" }),
+    });
+    assert.equal(posted.status, 200);
+    assert.deepEqual(await posted.json(), { status: "noted" });
+
+    // Live delivery: the open stream receives the step.
+    const live = await streamA.waitFor("agent-note");
+    assert.equal(live.text, "Pricing flights");
+
+    await fetch(`${base}/api/${key}/agent-note`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "Rewriting day 3" }),
+    });
+    assert.equal((await streamA.waitFor("agent-note")).text, "Rewriting day 3");
+
+    // Reconnect replay: a fresh stream gets both notes as a batch snapshot.
+    const streamB = await openStream(base, key);
+    const batch = await streamB.waitFor("agent-notes");
+    assert.deepEqual(
+      batch.notes.map((n) => n.text),
+      ["Pricing flights", "Rewriting day 3"],
+    );
+
+    // Validation: empty text rejected, unknown session 404s.
+    const empty = await fetch(`${base}/api/${key}/agent-note`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "   " }),
+    });
+    assert.equal(empty.status, 400);
+    const missing = await fetch(`${base}/api/deadbeefdeadbeef/agent-note`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "hi" }),
+    });
+    assert.equal(missing.status, 404);
+
+    await streamA.close();
+    await streamB.close();
   } finally {
     await server.close();
     await rm(dir, { recursive: true, force: true });

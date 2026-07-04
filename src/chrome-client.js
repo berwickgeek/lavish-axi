@@ -84,6 +84,8 @@ let endAfterSubmit = false;
 let workingBubble = null;
 let workingTimer = null;
 let workingStartAt = 0;
+/** @type {{text:string, at?:string}[]} Progress steps the agent posted during the current working span. */
+let workingNotes = [];
 let submitQueuedPromise = null;
 let submitQueuedAgain = false;
 let lastScroll = { x: 0, y: 0 };
@@ -236,36 +238,39 @@ function syncChat(chat) {
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
-const rttStorageKey = "lavish-axi:rtt";
-
-function loadRtt() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(rttStorageKey) || "[]");
-    return Array.isArray(parsed) ? parsed.filter((n) => typeof n === "number" && n > 0) : [];
-  } catch {
-    return [];
+// A note the agent posted while working on the current feedback. Buffer it and, if the working
+// bubble is showing, narrate it live. A note is a strong signal the agent is working, so ensure
+// the bubble exists (presence may lag) rather than dropping the step on the floor.
+function addWorkingNote(note) {
+  const text = note && typeof note.text === "string" ? note.text.trim() : "";
+  if (!text) return;
+  workingNotes.push({ text });
+  while (workingNotes.length > 12) workingNotes.shift();
+  if (!ended && agentPresence !== "working") {
+    setAgentPresence("working"); // builds the bubble, which renders the buffered notes
+  } else {
+    renderWorkingNotes();
   }
 }
 
-function recordRtt(ms) {
-  if (!(ms > 0)) return;
-  try {
-    const list = loadRtt();
-    list.push(ms);
-    while (list.length > 30) list.shift();
-    localStorage.setItem(rttStorageKey, JSON.stringify(list));
-  } catch {
-    // storage unavailable — the estimate just won't persist across sessions
+function renderWorkingNotes() {
+  if (!workingBubble) return;
+  const list = workingBubble.querySelector(".working-notes");
+  const bar = workingBubble.querySelector(".working-bar");
+  if (!list) return;
+  list.innerHTML = "";
+  for (const note of workingNotes) {
+    const item = document.createElement("li");
+    item.className = "working-note";
+    item.textContent = note.text;
+    list.appendChild(item);
   }
-}
-
-// Median of recent round trips; 0 until we have enough samples to be honest.
-function rttEstimateMs() {
-  const list = loadRtt();
-  if (list.length < 3) return 0;
-  const sorted = [...list].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+  const hasNotes = workingNotes.length > 0;
+  list.hidden = !hasNotes;
+  // The indeterminate shimmer is an honest "working, no step reported yet" placeholder; once a
+  // real step arrives it becomes noise, so retire it in favour of the narrated steps.
+  if (bar) bar.hidden = hasNotes;
+  if (hasNotes) chatLog.scrollTop = chatLog.scrollHeight;
 }
 
 function formatSecs(ms) {
@@ -290,21 +295,8 @@ function stopWorkingTimer() {
 function updateWorkingBubble() {
   if (!workingBubble || !workingStartAt) return;
   const elapsed = Date.now() - workingStartAt;
-  const est = rttEstimateMs();
   const elapsedEl = workingBubble.querySelector(".working-elapsed");
-  const estEl = workingBubble.querySelector(".working-est");
-  const bar = workingBubble.querySelector(".working-bar");
-  const fill = bar ? bar.querySelector("i") : null;
   if (elapsedEl) elapsedEl.textContent = formatSecs(elapsed);
-  if (est > 0) {
-    if (bar) bar.classList.remove("indeterminate");
-    if (estEl) estEl.textContent = "~" + formatSecs(est) + " typical";
-    if (fill) fill.style.width = Math.min(100, (elapsed / est) * 100) + "%";
-    if (bar) bar.classList.toggle("over", elapsed > est * 1.15);
-  } else {
-    if (estEl) estEl.textContent = "";
-    if (bar) bar.classList.add("indeterminate");
-  }
 }
 
 function setAgentPresence(state) {
@@ -313,10 +305,8 @@ function setAgentPresence(state) {
   if (presenceBanner) presenceBanner.hidden = ended || agentPresence !== "waiting";
 
   if (agentPresence !== "working") {
-    if (workingStartAt) {
-      recordRtt(Date.now() - workingStartAt);
-      workingStartAt = 0;
-    }
+    workingStartAt = 0;
+    workingNotes = []; // working span over — the next span starts fresh from the server's reset
     stopWorkingTimer();
     if (workingBubble) workingBubble.remove();
     workingBubble = null;
@@ -327,15 +317,18 @@ function setAgentPresence(state) {
     workingStartAt = Date.now();
     workingBubble = document.createElement("div");
     workingBubble.className = "bubble agent agent-working";
+    // "Working" + elapsed clock, then either the narrated steps the agent posts (honest live
+    // progress) or, until the first step arrives, an indeterminate shimmer meaning "no step yet".
     workingBubble.innerHTML =
       '<span class="spinner"></span>' +
       '<div class="working-body">' +
       '<div class="working-line"><span class="working-label">Working</span>' +
-      '<span class="working-elapsed">0s</span>' +
-      '<span class="working-est"></span></div>' +
+      '<span class="working-elapsed">0s</span></div>' +
+      '<ul class="working-notes" hidden></ul>' +
       '<div class="working-bar indeterminate"><i></i></div>' +
       "</div>";
     chatLog.appendChild(workingBubble);
+    renderWorkingNotes();
     startWorkingTimer();
   }
   chatLog.scrollTop = chatLog.scrollHeight;
@@ -887,6 +880,16 @@ events.addEventListener("chrome-reload", () => reloadAfterServerRestart());
 events.addEventListener("agent-reply", (event) => addChat("agent", JSON.parse(event.data).text));
 events.addEventListener("chat-sync", (event) => syncChat(JSON.parse(event.data).chat || []));
 events.addEventListener("agent-presence", (event) => setAgentPresence(JSON.parse(event.data).state));
+events.addEventListener("agent-note", (event) => addWorkingNote(JSON.parse(event.data)));
+events.addEventListener("agent-notes", (event) => {
+  // Batch replay on (re)connect: adopt the server's current working-span notes, then render.
+  const notes = JSON.parse(event.data).notes;
+  if (Array.isArray(notes)) {
+    workingNotes = notes.filter((n) => n && typeof n.text === "string").map((n) => ({ text: n.text }));
+    if (!ended && agentPresence !== "working") setAgentPresence("working");
+    else renderWorkingNotes();
+  }
+});
 
 render();
 initialChat.forEach((item) => addChat(item.role, item.text));

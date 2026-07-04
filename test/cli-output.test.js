@@ -27,6 +27,7 @@ import {
   fetchJson,
   getCommandHelp,
   normalizeArgv,
+  noteText,
   pollInterruptedText,
   pollWaitBannerText,
   pollWaitTickText,
@@ -720,6 +721,43 @@ test("poll help warns agents to leave the long poll running", () => {
   assert.match(help, /Do not pass --timeout-ms/);
   assert.match(help, /tests and debugging only/);
   assert.doesNotMatch(help, /above 10 minutes/);
+});
+
+test("note help explains live progress steps and that it does not wait", () => {
+  const help = getCommandHelp("note");
+
+  assert.match(help, /lavish-axi note <html-file>/);
+  assert.match(help, /Working/);
+  assert.match(help, /returns immediately|does not wait/);
+  assert.match(help, /ephemeral/);
+});
+
+test("note command is routed, not rewritten into open", () => {
+  assert.deepEqual(normalizeArgv(["note", "report.html", "Pricing flights"]), [
+    "note",
+    "report.html",
+    "Pricing flights",
+  ]);
+});
+
+test("noteText joins every positional after the file and ignores option flags", () => {
+  assert.equal(noteText(["report.html", "Pricing flights"], "report.html"), "Pricing flights");
+  assert.equal(noteText(["report.html", "Rewriting", "day", "3"], "report.html"), "Rewriting day 3");
+  assert.equal(noteText(["--no-open", "report.html", "Working"], "report.html"), "Working");
+  assert.equal(noteText(["report.html"], "report.html"), "");
+});
+
+test("open next_step and feedback next_step tell agents about progress notes", () => {
+  const open = createOpenOutput({ file: "/tmp/a.html", url: "http://x/session/a", status: "opened" });
+  assert.match(open.next_step, /lavish-axi note \/tmp\/a\.html/);
+
+  const feedback = createPollOutput({
+    file: "/tmp/a.html",
+    response: { status: "feedback", prompts: [{ prompt: "tweak" }], dom_snapshot: "" },
+  });
+  assert.match(feedback.next_step, /lavish-axi note \/tmp\/a\.html/);
+  // The phrase the poll-guidance test guards must stay intact.
+  assert.match(feedback.next_step, /Do not respond to the user just yet\. Now you must run/);
 });
 
 test("share help distinguishes public default from password-protected shares", () => {
