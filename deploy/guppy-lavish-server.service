@@ -15,6 +15,9 @@ Environment=LAVISH_AXI_PORT=7803
 Environment=LAVISH_AXI_LINK_HOST=guppy.tail72863e.ts.net
 # Never idle-shut-down: this is the always-on warm server, not an on-demand one.
 Environment=LAVISH_AXI_IDLE_TIMEOUT_MS=0
+# Served behind the launcher's /lavish reverse-proxy (one origin, no :8443). Every
+# emitted URL is /lavish-prefixed; the launcher strips the prefix before forwarding.
+Environment=LAVISH_AXI_BASE_PATH=/lavish
 
 [Install]
 WantedBy=default.target
