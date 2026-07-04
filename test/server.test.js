@@ -872,6 +872,37 @@ test("session URLs use the configured linkHost while binding to loopback", async
   }
 });
 
+test("warm server (idle disabled) stays up after its last session ends", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const artifact = path.join(dir, "artifact.html");
+  await writeFile(artifact, "<!doctype html><html><body></body></html>");
+  const server = await serve({
+    port: 0,
+    stateFile: path.join(dir, "state.json"),
+    version: "9.9.9-test",
+    idleTimeoutMs: null,
+  });
+  try {
+    const base = `http://127.0.0.1:${server.port}`;
+    const created = await fetch(`${base}/api/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ file: artifact }),
+    });
+    const { url } = await created.json();
+    const key = url.match(/\/session\/([a-f0-9]+)/)[1];
+    // End the only session — a non-warm server would self-shut-down here.
+    const ended = await fetch(`${base}/api/${key}/end`, { method: "POST" });
+    assert.equal(ended.status, 200);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const health = await fetch(`${base}/health`);
+    assert.equal(health.status, 200);
+  } finally {
+    await server.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("session URLs can disable the layout gate for one open", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
   const artifact = path.join(dir, "artifact.html");

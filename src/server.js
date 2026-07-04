@@ -566,6 +566,9 @@ export async function serve({
   // idle timer reap it once those connections drop. Best-effort: never let a read failure
   // block the end response.
   async function shutdownIfNoLiveSessions() {
+    // When idle self-shutdown is disabled (LAVISH_AXI_IDLE_TIMEOUT_MS=0/off), the
+    // server is meant to stay warm — don't tear it down when the last session ends.
+    if (idleTimeoutMs == null) return;
     if (sseClients.size > 0 || activePolls.size > 0) return;
     try {
       const sessions = await store.listSessions();
