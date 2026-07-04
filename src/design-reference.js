@@ -1,4 +1,5 @@
 import { listPlaybooks, PLAYBOOK_ROUTER_INSTRUCTION } from "./playbooks.js";
+import { GUPPY_PLAN_KIT_CSS, GUPPY_PLAN_KIT_DECISION_JS, GUPPY_PLAN_KIT_RULES } from "./guppy-plan-kit.js";
 
 export const TAILWIND_BROWSER_VERSION = "4.2.4";
 export const DAISYUI_VERSION = "5.5.19";
@@ -89,6 +90,15 @@ export function createDesignOutput() {
       playbooks: listPlaybooks(),
     },
     design: {
+      guppy_plan_kit: {
+        is_default:
+          "DEFAULT design system for Guppy plans, reports, and decision artifacts. Inline `css` once in <head>, then build with the `gk-` classes. Self-contained: no CDN, no network, LIGHT theme only (Guppy's house rule — no dark mode), and overflow-hardened by construction so Lavish's layout audit stays quiet. Prefer this over the DaisyUI CDN fallback below unless the artifact must faithfully mock a specific product's own UI.",
+        css: GUPPY_PLAN_KIT_CSS,
+        decision_widget_js: GUPPY_PLAN_KIT_DECISION_JS,
+        rules: GUPPY_PLAN_KIT_RULES,
+        components:
+          "masthead (.gk-masthead/.gk-dot/.gk-title/.gk-lede); section label (.gk-h2); card (.gk-card); phase/step (.gk-phase/.gk-pnum/.gk-steps/.gk-dod); callout (.gk-callout .info/.warn/.risk); status tag (.gk-tag .ok/.warn/.risk); comparison/data table (.gk-scroll > table.gk-table); KPI/status tiles (.gk-tiles/.gk-tile with .gk-val/.gk-lbl); chips (.gk-chips/.gk-chip); two-column list (.gk-cols); figure+caption for real screenshots (.gk-figure > img + .gk-cap); code (.gk-code); decision (.gk-decide: in-flow .gk-pick radios, details.gk-explain, dashed .gk-choice.none, .gk-custom box, .gk-send button — pair with decision_widget_js).",
+      },
       summary:
         "Use this Lavish CDN fallback only if (1) the user gave no design direction and (2) you already inspected the project the artifact is about - the subject or product whose content or UI it represents, which may differ from your current working directory - and found no design system or style conventions to match. If you have not checked the subject project yet, check first. Lavish does not auto-inject any design system; artifacts stay portable HTML. The strict priority order is: (1) a look or named design system the user asked for; (2) the subject project's design system or style conventions - look for a Tailwind or theme config, shared CSS variables or design tokens, a component library, brand assets, or existing styled pages. If the artifact previews, proposes, or mocks a specific app's UI, render it in that app's own design system so it faithfully shows the product, even when you are running in a different repo; (3) this Tailwind CSS browser runtime v4 + DaisyUI v5 + themes snippet - paste the CDN snippet below into your `<head>` and prefer the CDN snippet over hand-writing styles unless explicitly instructed otherwise by the user.",
       cdn_snippet: DESIGN_CDN_SNIPPET,
@@ -111,7 +121,7 @@ export function createDesignOutput() {
       versions: { mermaid: MERMAID_VERSION },
     },
     theme_usage: [
-      'Default to `<html data-theme="luxury">` - it matches the Lavish look. Pick a different theme from the list below only when the user asked for one or the content clearly calls for it.',
+      'For Guppy artifacts prefer the guppy_plan_kit above. If you do fall through to DaisyUI, default to a LIGHT theme such as `<html data-theme="light">` (or `winter`/`silk`) - Guppy is light-only unless the user explicitly asked for dark. Pick another theme from the list below only when the user asked for one.',
       'Set a nested section theme with `<section data-theme="night">`.',
       "Prefer semantic colors such as `bg-base-100`, `bg-base-200`, `text-base-content`, `bg-primary`, `text-primary-content`, `alert-warning`, and `btn-primary` so themes remain readable.",
       "Avoid hardcoded Tailwind color names for text and surfaces unless the user asked for exact colors.",

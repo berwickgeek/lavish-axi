@@ -241,12 +241,31 @@ test("design output prints copy-pasteable CDN URLs so agents can opt in to Daisy
   assert.ok(output.reference.mockup.notes.some((item) => item.includes("line numbers")));
 });
 
-test("design output recommends luxury as the default theme and warns against @apply on DaisyUI classes", () => {
+test("design output defaults to a light theme (Guppy is light-only) and warns against @apply on DaisyUI classes", () => {
   const output = createDesignOutput();
 
-  assert.ok(output.theme_usage.some((item) => /default.*luxury|luxury.*default/i.test(item)));
+  // Guppy's house rule is no dark mode: the DaisyUI fallback must not default to a
+  // dark theme like luxury, and should steer to a light one.
+  assert.ok(output.theme_usage.some((item) => /default to a LIGHT theme|data-theme="light"/i.test(item)));
+  assert.ok(!output.theme_usage.some((item) => /default.*luxury|luxury.*default/i.test(item)));
   assert.ok(output.theme_usage.some((item) => item.includes("@apply") && /daisyui/i.test(item)));
   assert.ok(output.theme_usage.some((item) => /aborts the entire|no Tailwind styles/i.test(item)));
+});
+
+test("design output surfaces the Guppy Plan Kit as the default design system", () => {
+  const output = createDesignOutput();
+  const kit = output.design.guppy_plan_kit;
+
+  assert.ok(kit, "guppy_plan_kit present on design output");
+  assert.match(kit.is_default, /DEFAULT design system for Guppy/i);
+  assert.match(kit.is_default, /light/i);
+  // Self-contained, inlinable stylesheet with the namespaced components.
+  assert.match(kit.css, /<style>/);
+  assert.match(kit.css, /\.gk-decide/);
+  assert.match(kit.css, /\.gk-pick input\{grid-column:1/); // in-flow radio, never absolute
+  assert.match(kit.css, /overflow-wrap:anywhere/);
+  assert.ok(Array.isArray(kit.rules) && kit.rules.length >= 5);
+  assert.match(kit.decision_widget_js, /queuePrompt/);
 });
 
 test("playbook index output lists known playbooks with concise descriptions", () => {
