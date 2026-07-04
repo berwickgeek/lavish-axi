@@ -833,6 +833,35 @@ test("/health reports the server version so clients can detect upgrades", async 
   }
 });
 
+test("GET /api/sessions lists sessions for the reviews queue", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const artifact = path.join(dir, "plan.html");
+  await writeFile(artifact, "<!doctype html><html><body></body></html>");
+  const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
+  try {
+    const base = `http://127.0.0.1:${server.port}`;
+    let list = await (await fetch(`${base}/api/sessions`)).json();
+    assert.deepEqual(list.sessions, []);
+
+    await fetch(`${base}/api/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ file: artifact }),
+    });
+
+    list = await (await fetch(`${base}/api/sessions`)).json();
+    assert.equal(list.sessions.length, 1);
+    assert.equal(list.sessions[0].name, "plan.html");
+    assert.match(list.sessions[0].file, /plan\.html$/);
+    assert.equal(typeof list.sessions[0].key, "string");
+    assert.ok(list.sessions[0].key.length > 0);
+    assert.equal(typeof list.sessions[0].status, "string");
+  } finally {
+    await server.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("session URLs use the same IPv4 loopback host the server binds", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
   const artifact = path.join(dir, "artifact.html");

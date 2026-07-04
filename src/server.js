@@ -116,6 +116,26 @@ export async function serve({
     setImmediate(shutdown);
   });
 
+  // List sessions — powers the launcher's Reviews queue (discovery of what's open
+  // for review). Returns lightweight summaries; the caller builds its own open URL.
+  app.get("/api/sessions", async (req, res, next) => {
+    try {
+      const sessions = await store.listSessions();
+      res.json({
+        sessions: sessions.map((session) => ({
+          key: session.key,
+          file: session.file,
+          name: path.basename(session.file),
+          status: session.status,
+          url: session.url,
+          pending_prompts: Array.isArray(session.prompts) ? session.prompts.length : 0,
+        })),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.post("/api/sessions", async (req, res, next) => {
     try {
       const file = await canonicalFile(req.body.file);
