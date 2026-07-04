@@ -9,12 +9,12 @@
  */
 
 class NoopTelemetryClient {
-  pageview() {}
-  track() {}
-  async close() {}
+  pageview(_path, _data) {}
+  track(_event, _data) {}
+  async close(_timeoutMs) {}
 }
 
-export function resolveTelemetryConfig() {
+export function resolveTelemetryConfig(_input) {
   // The Guppy fork never enables telemetry, whatever the env or build-time values.
   return { enabled: false, host: "", websiteID: "" };
 }
@@ -27,13 +27,13 @@ export function getBuildTimeUmamiWebsiteID() {
   return "";
 }
 
-export function createTelemetryClient() {
+export function createTelemetryClient(_config) {
   return new NoopTelemetryClient();
 }
 
 let defaultClient = new NoopTelemetryClient();
 
-export function initDefaultTelemetry() {
+export function initDefaultTelemetry(_init) {
   defaultClient = new NoopTelemetryClient();
   return defaultClient;
 }
