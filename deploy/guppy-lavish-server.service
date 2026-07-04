@@ -1,0 +1,20 @@
+[Unit]
+Description=Guppy Lavish Editor server (warm, always-on review surface)
+After=network.target
+
+[Service]
+Type=simple
+# Run the Guppy fork directly (npm-linked as `lavish-axi`, but pin the path so the
+# unit doesn't depend on PATH). Foreground server on a fixed loopback port, fronted
+# by `tailscale serve --https=8443` and (once cut over) the launcher /lavish proxy.
+ExecStart=/usr/bin/env node %h/code/lavish-axi/dist/cli.mjs server
+Restart=always
+RestartSec=2
+Environment=LAVISH_AXI_HOST=127.0.0.1
+Environment=LAVISH_AXI_PORT=7803
+Environment=LAVISH_AXI_LINK_HOST=guppy.tail72863e.ts.net
+# Never idle-shut-down: this is the always-on warm server, not an on-demand one.
+Environment=LAVISH_AXI_IDLE_TIMEOUT_MS=0
+
+[Install]
+WantedBy=default.target
