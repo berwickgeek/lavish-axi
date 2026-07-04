@@ -145,6 +145,9 @@ function render() {
     closeButton.addEventListener("click", (event) => removeQueuedPrompt(Number(closeButton.dataset.index), event));
   }
   updateSendState();
+  // Keep the artifact's persistent "you've commented on this" marks in sync with the
+  // queue — marks for annotations the human removed get cleared.
+  postToFrame({ type: "lavish:syncMarks", ids: queued.map((p) => p && p._lavishMarkId).filter(Boolean) });
 }
 
 function updateSendState() {
@@ -365,6 +368,7 @@ function stripInternalPromptFields(prompt) {
   if (!prompt || typeof prompt !== "object") return prompt;
   const clean = { ...prompt };
   delete clean[internalQueueKeyField];
+  delete clean._lavishMarkId;
   return clean;
 }
 

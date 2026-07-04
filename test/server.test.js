@@ -270,11 +270,12 @@ test("annotation card title renders selected tag as an html element name", () =>
   assert.match(js, /"Annotate &lt;" \+ c\.tag \+ "&gt;"/);
 });
 
-test("annotation card shadow styles use Lavish design-system variables", () => {
+test("annotation card shadow styles use the Guppy light theme", () => {
   const js = createSdkJs("abc");
 
-  assert.match(js, /--ink-900:#0f1115/);
-  assert.match(js, /--accent:#f4c95d/);
+  assert.match(js, /color-scheme:light/);
+  assert.match(js, /--bg:#faf6f0/);
+  assert.match(js, /--accent:#e8734a/);
   assert.match(js, /--font-sans:/);
   assert.match(js, /font-family:var\(--font-sans\)/);
   assert.match(js, /:focus-visible\{outline:2px solid var\(--accent\);outline-offset:2px/);
@@ -317,16 +318,23 @@ test("chrome declares the Lavish design-system tokens", async () => {
   assert.match(css, /--panel-w:360px/);
 });
 
-test("artifact SDK uses design-token aliases for annotation highlight and shadow UI", () => {
+test("artifact SDK uses the coral accent for annotation highlight, and marks annotated targets", () => {
   const js = createSdkJs("abc");
 
-  assert.match(js, /--lavish-accent:#f4c95d/);
+  assert.match(js, /--lavish-accent:#e8734a/);
   assert.match(js, /--lavish-annotate-outline:2px solid var\(--lavish-accent\)/);
-  assert.match(js, /el\.style\.outline\s*=\s*["']var\(--lavish-annotate-outline,2px solid #f4c95d\)["']/);
+  assert.match(js, /el\.style\.outline\s*=\s*["']var\(--lavish-annotate-outline,2px solid #e8734a\)["']/);
   assert.match(js, /el\.style\.outlineOffset\s*=\s*["']var\(--lavish-annotate-offset,2px\)["']/);
-  assert.match(js, /--fg-faint:var\(--steel-300\)/);
+  assert.match(js, /--fg-faint:#9a9086/);
   assert.match(js, /textarea::placeholder\{color:var\(--fg-faint\)\}/);
   assert.doesNotMatch(js, /placeholder\{color:#aeb6c6\}/);
+
+  // Persistent "you've commented on this" mark: an inset coral outline (no overflow),
+  // reconciled from the queue via lavish:syncMarks.
+  assert.match(js, /data-lavish-marked/);
+  assert.match(js, /outline-offset:-2px/);
+  assert.match(js, /function syncPersistentMarks/);
+  assert.match(js, /msg\.type === "lavish:syncMarks"/);
 });
 
 test("chrome uses the annotation outline as the keyboard focus outline", async () => {
