@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# guppy-lavish — open an HTML artifact in Lavish Editor, fronted on the Guppy tailnet.
+#
+# Lavish assumes a local desktop browser; Guppy has none. This wrapper binds the
+# Lavish server to loopback, fronts it with a dedicated tailscale-serve HTTPS port,
+# and prints the tailnet URL (rewriting Lavish's http://:PORT link to https://:8443).
+# Tailnet-only, same trust model as the launcher/shelf. Never binds 0.0.0.0.
+#
+# Usage:
+#   guppy-lavish <file.html>          open/resume a session, print the tailnet URL
+#   guppy-lavish poll <file.html>     long-poll for the user's annotations (leave running)
+#   guppy-lavish end  <file.html>     end the session as the agent
+#   guppy-lavish stop                 shut the background server down
+#   guppy-lavish kit                  print the Guppy Plan Kit (inline CSS + decision JS)
+set -euo pipefail
+
+PORT=7803                       # pinned loopback bind (7800-2 launcher/shelf/imsg, 7810 browser)
+HTTPS_PORT=8443                 # dedicated tailnet HTTPS port (avoids launcher collision at /)
+HOSTNAME_TS=guppy.tail72863e.ts.net
+
+export LAVISH_AXI_HOST=127.0.0.1
+export LAVISH_AXI_PORT="$PORT"
+export LAVISH_AXI_LINK_HOST="$HOSTNAME_TS"
+
+# rewrite Lavish's http://host:PORT/... into the tailnet https://host:8443/...
+rewrite() { sed -E "s#http://${HOSTNAME_TS}:${PORT}#https://${HOSTNAME_TS}:${HTTPS_PORT}#g"; }
+
+ensure_serve() {
+  if ! tailscale serve status 2>/dev/null | grep -q ":${HTTPS_PORT}"; then
+    sudo tailscale serve --bg --https="${HTTPS_PORT}" "http://127.0.0.1:${PORT}" >/dev/null 2>&1 || \
+         tailscale serve --bg --https="${HTTPS_PORT}" "http://127.0.0.1:${PORT}" >/dev/null 2>&1
+  fi
+}
+
+FORK_DIR="${LAVISH_FORK_DIR:-$HOME/code/lavish-axi}"
+
+cmd="${1:-}"
+case "$cmd" in
+  kit)
+    # The Guppy Plan Kit: inline CSS + decision-widget JS, single-sourced from the fork.
+    # Paste the CSS into <head> and the JS before </body>; build with gk- classes.
+    node -e "import('${FORK_DIR}/src/guppy-plan-kit.js').then(m=>process.stdout.write(m.GUPPY_PLAN_KIT_CSS+'\n'+m.GUPPY_PLAN_KIT_DECISION_JS+'\n'))" ;;
+  poll|end|stop|export|share|playbook|design|update)
+    exec lavish-axi "$@" 2> >(rewrite >&2) | rewrite ;;
+  ""|-h|--help)
+    echo "usage: guppy-lavish <file.html> | poll <file.html> | end <file.html> | stop | kit"; exit 0 ;;
+  *)
+    ensure_serve
+    lavish-axi --no-open "$@" | rewrite ;;
+esac
