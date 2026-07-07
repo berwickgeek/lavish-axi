@@ -188,7 +188,11 @@ export const GUPPY_PLAN_KIT_DECISION_JS = `<script>
       var q = btn.getAttribute("data-label") || grp || "Decision";
       if (window.lavish && typeof window.lavish.queuePrompt === "function") {
         window.lavish.queuePrompt("Decision [" + q + "]: " + label, { queueKey: grp });
-        if (hint) hint.textContent = "Queued \\u2713 \\u2014 hit Send in the composer to fire it back.";
+        // Fire it straight to chat. postMessage delivery is ordered, so the queued pick
+        // lands in the composer before the send flushes it — one tap = sent, no separate
+        // "hit Send in the composer" step (which is unreachable on the iPad handoff).
+        if (typeof window.lavish.sendQueuedPrompts === "function") window.lavish.sendQueuedPrompts();
+        if (hint) hint.textContent = "Sent \\u2713";
       } else if (hint) { hint.textContent = "Picked: " + label + " (open through Lavish to send)."; }
     });
   });

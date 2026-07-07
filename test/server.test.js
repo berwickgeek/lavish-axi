@@ -80,7 +80,7 @@ test("server serves chrome browser behavior from a dedicated source file", async
 
   assert.match(source, /chrome-client\.js/);
   assert.match(html, /<script id="lavish-session" type="application\/json">/);
-  assert.match(html, /<script src="\/chrome-client\.js"><\/script>/);
+  assert.match(html, /<script src="\/chrome-client\.js\?v=\d+"><\/script>/);
   assert.doesNotMatch(html, /<script>\s*const key=/);
 });
 
@@ -89,7 +89,7 @@ test("server serves chrome styles from a dedicated source file", async () => {
   const html = createChromeHtml({ key: "abc", file: "/tmp/artifact.html" });
 
   assert.match(source, /chrome\.css/);
-  assert.match(html, /<link rel="stylesheet" href="\/chrome\.css">/);
+  assert.match(html, /<link rel="stylesheet" href="\/chrome\.css\?v=\d+">/);
   assert.doesNotMatch(html, /<style>/);
 });
 
@@ -390,7 +390,9 @@ test("chrome keeps the editor usable on narrow screens", async () => {
 
   assert.match(css, /@media \(max-width:860px\)/);
   assert.match(css, /grid-template-columns:1fr/);
-  assert.match(css, /grid-template-rows:minmax\(0,1fr\) min\(42vh,360px\)/);
+  assert.match(css, /grid-template-rows:minmax\(0,1fr\) min\(46dvh,360px\)/);
+  // dvh keeps the composer on-screen under iPad Safari's dynamic toolbars.
+  assert.match(css, /height:calc\(100dvh - var\(--bar-h\)\)/);
 });
 
 test("chrome top bar follows the design mock wordmark and overflow menu treatment", async () => {
@@ -2625,7 +2627,7 @@ test("layout gate curtain reuses the ended overlay card styling", async () => {
   assert.match(html, /<body class="lavish layout-gate-active">/);
   assert.match(
     html,
-    /<iframe id="artifact" sandbox="allow-scripts allow-forms allow-popups allow-downloads" data-artifact-src="\/artifact\/abc\/index\.html"><\/iframe>/,
+    /<iframe id="artifact" sandbox="allow-scripts allow-forms allow-popups allow-downloads" data-artifact-src="\/artifact\/abc\/index\.html\?v=\d+"><\/iframe>/,
   );
   assert.doesNotMatch(html, /<iframe id="artifact"[^>]* src=/);
   assert.match(html, /class="ended-overlay layout-gate-overlay" id="layoutGateOverlay"/);
