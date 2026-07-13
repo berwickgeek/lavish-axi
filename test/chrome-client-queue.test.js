@@ -521,7 +521,7 @@ test("layout gate reveals after a clean audit result", async () => {
   assert.deepEqual(posts[0], { url: "/api/abc/layout-warnings", body: { layout_warnings: [] } });
 });
 
-test("layout gate holds on error severity audit findings and still posts them", async () => {
+test("layout gate reveals on error severity audit findings with the banner and still posts them", async () => {
   const posts = [];
   const chrome = await createChromeHarness({
     fetchImpl: async (url, init) => {
@@ -544,9 +544,10 @@ test("layout gate holds on error severity audit findings and still posts them", 
   });
   await flushPromises();
 
-  assert.equal(chrome.element("layoutGateOverlay").hidden, false);
-  assert.equal(chrome.element("body").classList.contains("layout-gate-active"), true);
-  assert.match(chrome.element("layoutGateTitle").innerHTML, /Fixing a layout issue/);
+  assert.equal(chrome.element("layoutGateOverlay").hidden, true);
+  assert.equal(chrome.element("body").classList.contains("layout-gate-active"), false);
+  assert.equal(chrome.element("layoutIssueBanner").hidden, false);
+  assert.match(chrome.element("layoutIssueBanner").textContent, /agent has been notified/);
   assert.deepEqual(posts[0].body.layout_warnings[0].severity, "error");
 });
 
@@ -572,15 +573,11 @@ test("layout gate does not hold on warning severity audit findings", async () =>
   assert.equal(chrome.element("layoutIssueBanner").hidden, true);
 });
 
-test("layout gate timeout reveals with a persistent layout issue banner", async () => {
+test("layout gate timeout reveals with a persistent layout issue banner when no audit result arrives", async () => {
   const chrome = await createChromeHarness({
     sessionData: { key: "abc", file: "/tmp/artifact.html", layoutGateMaxHoldMs: 25 },
   });
 
-  chrome.sendFrameMessage({
-    type: "lavish:layoutWarnings",
-    layout_warnings: [{ selector: "html", kind: "content-overlap", severity: "error" }],
-  });
   assert.equal(chrome.element("layoutGateOverlay").hidden, false);
 
   chrome.runTimers(25);
@@ -591,15 +588,11 @@ test("layout gate timeout reveals with a persistent layout issue banner", async 
   assert.match(chrome.element("layoutIssueBanner").textContent, /may have layout issues/);
 });
 
-test("layout gate timeout re-arms on reload", async () => {
+test("layout gate re-arms on reload and reveals with the banner on error findings", async () => {
   const chrome = await createChromeHarness({
     sessionData: { key: "abc", file: "/tmp/artifact.html", layoutGateMaxHoldMs: 25 },
   });
 
-  chrome.sendFrameMessage({
-    type: "lavish:layoutWarnings",
-    layout_warnings: [{ selector: "html", kind: "content-overlap", severity: "error" }],
-  });
   chrome.runTimers(25);
   assert.equal(chrome.element("layoutGateOverlay").hidden, true);
   assert.equal(chrome.element("layoutIssueBanner").hidden, false);
@@ -615,8 +608,9 @@ test("layout gate timeout re-arms on reload", async () => {
     layout_warnings: [{ selector: "html", kind: "content-overlap", severity: "error" }],
   });
 
-  assert.equal(chrome.element("layoutGateOverlay").hidden, false);
-  assert.match(chrome.element("layoutGateTitle").innerHTML, /Fixing a layout issue/);
+  assert.equal(chrome.element("layoutGateOverlay").hidden, true);
+  assert.equal(chrome.element("body").classList.contains("layout-gate-active"), false);
+  assert.equal(chrome.element("layoutIssueBanner").hidden, false);
 });
 
 test("layout gate manual override reveals immediately", async () => {

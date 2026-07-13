@@ -8,12 +8,17 @@
 # Tailnet-only, same trust model as the launcher/shelf. Never binds 0.0.0.0.
 #
 # Usage:
-#   guppy-lavish <file.html>          open/resume a session, print the tailnet URL
+#   guppy-lavish <file.html>          pre-flight + open/resume a session, print the tailnet URL
+#   guppy-lavish check <file.html>    pre-flight only: audit layout at phone/iPad widths
 #   guppy-lavish poll <file.html>     long-poll for the user's annotations (leave running)
 #   guppy-lavish note <file.html> "…" post a live progress step to the "Working" indicator
 #   guppy-lavish end  <file.html>     end the session as the agent
 #   guppy-lavish stop                 shut the background server down
 #   guppy-lavish kit                  print the Guppy Plan Kit (inline CSS + decision JS)
+#
+# Opens run a pre-flight layout audit (same thresholds as the in-browser audit) in
+# headless Chromium at 402/810/1080px BEFORE printing the URL, so overflow is fixed
+# before the human ever sees the page instead of via a live roundtrip. --force skips it.
 set -euo pipefail
 
 PORT=7803                       # warm-server loopback bind (7800-2 launcher/shelf/imsg, 7810 browser)
@@ -32,16 +37,26 @@ rewrite() { sed -E "s#http://${HOSTNAME_TS}:${PORT}#https://${HOSTNAME_TS}#g"; }
 
 FORK_DIR="${LAVISH_FORK_DIR:-$HOME/code/lavish-axi}"
 
+preflight() { node "${FORK_DIR}/deploy/guppy-preflight.mjs" "$1"; }
+
 cmd="${1:-}"
 case "$cmd" in
   kit)
     # The Guppy Plan Kit: inline CSS + decision-widget JS, single-sourced from the fork.
     # Paste the CSS into <head> and the JS before </body>; build with gk- classes.
     node -e "import('${FORK_DIR}/src/guppy-plan-kit.js').then(m=>process.stdout.write(m.GUPPY_PLAN_KIT_CSS+'\n'+m.GUPPY_PLAN_KIT_DECISION_JS+'\n'))" ;;
+  check)
+    shift; preflight "${1:?usage: guppy-lavish check <file.html>}" ;;
   poll|note|end|stop|export|share|playbook|design|update)
     exec lavish-axi "$@" 2> >(rewrite >&2) | rewrite ;;
   ""|-h|--help)
-    echo "usage: guppy-lavish <file.html> | poll <file.html> | note <file.html> \"…\" | end <file.html> | stop | kit"; exit 0 ;;
+    echo "usage: guppy-lavish <file.html> [--force] | check <file.html> | poll <file.html> | note <file.html> \"…\" | end <file.html> | stop | kit"; exit 0 ;;
   *)
-    lavish-axi --no-open "$@" | rewrite ;;
+    # open/resume: pre-flight first so broken layout never reaches the reviewer's device.
+    args=(); force=0
+    for a in "$@"; do [[ "$a" == "--force" ]] && force=1 || args+=("$a"); done
+    if [[ $force -eq 0 ]]; then
+      preflight "${args[0]}" || { echo "not opened — fix the findings above and re-run (or --force)" >&2; exit 1; }
+    fi
+    lavish-axi --no-open "${args[@]}" | rewrite ;;
 esac

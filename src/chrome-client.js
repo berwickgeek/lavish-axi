@@ -72,7 +72,7 @@ const configuredLayoutGateMaxHoldMs = Number(sessionData.layoutGateMaxHoldMs);
 const layoutGateMaxHoldMs =
   Number.isFinite(configuredLayoutGateMaxHoldMs) && configuredLayoutGateMaxHoldMs > 0
     ? Math.min(configuredLayoutGateMaxHoldMs, 60_000)
-    : 12_000;
+    : 4_000;
 let layoutGateVisible = false;
 let layoutGateArmed = false;
 let layoutGateManuallyBypassed = !layoutGateEnabled;
@@ -480,16 +480,8 @@ function clearLayoutGateTimer() {
   layoutGateTimer = undefined;
 }
 
-function setLayoutGateCard(state) {
+function setLayoutGateCard() {
   if (!layoutGateTitle || !layoutGateCopy) return;
-
-  if (state === "held") {
-    layoutGateTitle.innerHTML = "Fixing a layout issue...";
-    layoutGateCopy.textContent =
-      "The real browser found overflow or overlapping content. Your agent has been notified and this will reveal after the next clean reload.";
-    return;
-  }
-
   layoutGateTitle.innerHTML = "Checking layout.<br>One moment.";
   layoutGateCopy.textContent = "Lavish is waiting for fonts and final geometry before revealing this artifact.";
 }
@@ -523,7 +515,7 @@ function startLayoutGateCycle() {
   layoutGateCycle += 1;
   layoutGateArmed = true;
   setLayoutIssueBanner(false);
-  setLayoutGateCard("checking");
+  setLayoutGateCard();
   setLayoutGateActive(true);
   clearLayoutGateTimer();
 
@@ -546,15 +538,14 @@ function handleLayoutWarningsForGate(layoutWarnings) {
     return;
   }
 
-  if (!layoutGateArmed && !layoutGateVisible) return;
-
-  if (!hasErrors) {
-    revealLayoutGate();
+  if (!layoutGateArmed && !layoutGateVisible) {
+    setLayoutIssueBanner(hasErrors);
     return;
   }
 
-  setLayoutGateCard("held");
-  setLayoutGateActive(true);
+  // Never hold the artifact hostage on errors: reveal with the banner. The agent has
+  // already been notified and the fix arrives as a hot reload — review is never blocked.
+  revealLayoutGate({ showBanner: hasErrors });
 }
 
 function initializeLayoutGate() {

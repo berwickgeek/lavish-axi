@@ -5,8 +5,9 @@
  * the patterns proven in the Guppy × Lavish plan reviews. No CDN, no build step: it
  * inlines as one <style> block, so it renders identically anywhere and never depends
  * on the network. Every component is overflow-hardened BY CONSTRUCTION (min-width:0,
- * minmax(0,1fr) tracks, overflow-wrap on mono, in-flow controls, opt-in scrollers) so
- * Lavish's layout audit stays quiet without per-artifact fixups.
+ * auto-fit tracks with real px floors so grids WRAP on phones instead of crushing —
+ * minmax(0,1fr) never wraps — overflow-wrap everywhere, in-flow controls, opt-in
+ * scrollers) so Lavish's layout audit stays quiet without per-artifact fixups.
  *
  * All classes are namespaced `gk-` so the Kit can be dropped into any artifact.
  */
@@ -25,7 +26,7 @@ export const GUPPY_PLAN_KIT_CSS = `<style>
 *{box-sizing:border-box; min-width:0}
 html,body{margin:0}
 body{background:var(--gk-paper); color:var(--gk-ink); font:16px/1.55 var(--gk-sans);
-  -webkit-font-smoothing:antialiased}
+  -webkit-font-smoothing:antialiased; overflow-wrap:break-word}
 .gk-wrap{max-width:820px; margin:0 auto; padding:40px 22px 80px}
 .gk-wrap.narrow{max-width:680px}
 
@@ -91,21 +92,21 @@ b,strong{font-weight:640}
   letter-spacing:.05em}
 
 /* KPI / status tiles */
-.gk-tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(0,1fr)); gap:10px}
+.gk-tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr)); gap:10px}
 .gk-tile{background:var(--gk-card); border:1px solid var(--gk-line); border-radius:12px;
   padding:13px 15px; box-shadow:var(--gk-shadow)}
 .gk-tile .gk-val{font-size:22px; font-weight:680; letter-spacing:-.01em; font-variant-numeric:tabular-nums}
 .gk-tile .gk-lbl{font-size:12px; color:var(--gk-sub); margin-top:2px}
 
 /* chips grid */
-.gk-chips{display:grid; grid-template-columns:repeat(auto-fit,minmax(0,1fr)); gap:9px}
+.gk-chips{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr)); gap:9px}
 .gk-chip{background:var(--gk-card); border:1px solid var(--gk-line); border-radius:11px;
   padding:11px 13px; box-shadow:var(--gk-shadow)}
 .gk-chip b{display:block; font-size:13.5px; font-weight:640; margin-bottom:2px}
 .gk-chip span{font-size:12px; color:var(--gk-sub)}
 
 /* two-column list (e.g. add / remove) */
-.gk-cols{display:grid; grid-template-columns:repeat(auto-fit,minmax(0,1fr)); gap:12px}
+.gk-cols{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr)); gap:12px}
 
 /* figure + caption (embed real screenshots — show, don't tell) */
 .gk-figure{margin:0 0 14px; border:1px solid var(--gk-line); border-radius:13px; overflow:hidden;
@@ -124,7 +125,7 @@ b,strong{font-weight:640}
 .gk-q{font-size:15px; font-weight:640; margin:0 0 12px}
 .gk-q .gk-rec{font-size:11.5px; font-weight:700; color:var(--gk-sea); background:var(--gk-sea-soft);
   border-radius:5px; padding:1px 7px; margin-left:7px}
-.gk-choices{display:grid; grid-template-columns:repeat(auto-fit,minmax(0,1fr)); gap:9px}
+.gk-choices{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr)); gap:9px}
 .gk-choice{border:1.5px solid var(--gk-line); border-radius:11px; padding:11px 12px;
   transition:border-color .12s, box-shadow .12s}
 .gk-choice:has(input:checked){border-color:var(--gk-coral); box-shadow:0 0 0 3px var(--gk-coral-soft)}
