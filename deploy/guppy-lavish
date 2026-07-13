@@ -8,13 +8,16 @@
 # Tailnet-only, same trust model as the launcher/shelf. Never binds 0.0.0.0.
 #
 # Usage:
+#   guppy-lavish new <file.html> [--title "…"] [--lede "…"]
+#                                     scaffold a complete Kit page with an empty gk-body region
+#   guppy-lavish classes              print the ~25-line gk- class cheat-sheet (not the CSS)
 #   guppy-lavish <file.html>          pre-flight + open/resume a session, print the tailnet URL
 #   guppy-lavish check <file.html>    pre-flight only: audit layout at phone/iPad widths
 #   guppy-lavish poll <file.html>     long-poll for the user's annotations (leave running)
 #   guppy-lavish note <file.html> "…" post a live progress step to the "Working" indicator
 #   guppy-lavish end  <file.html>     end the session as the agent
 #   guppy-lavish stop                 shut the background server down
-#   guppy-lavish kit                  print the Guppy Plan Kit (inline CSS + decision JS)
+#   guppy-lavish kit                  print the raw Kit CSS+JS (rarely needed — prefer new/classes)
 #
 # Opens run a pre-flight layout audit (same thresholds as the in-browser audit) in
 # headless Chromium at 402/810/1080px BEFORE printing the URL, so overflow is fixed
@@ -41,6 +44,12 @@ preflight() { node "${FORK_DIR}/deploy/guppy-preflight.mjs" "$1"; }
 
 cmd="${1:-}"
 case "$cmd" in
+  new)
+    # Scaffold a full Kit page on disk — the CSS/JS never has to pass through the
+    # authoring agent's context; it only writes the body between the gk-body markers.
+    shift; node "${FORK_DIR}/deploy/guppy-scaffold.mjs" "$@" ;;
+  classes)
+    node -e "import('${FORK_DIR}/src/guppy-plan-kit.js').then(m=>process.stdout.write(m.GUPPY_PLAN_KIT_CHEATSHEET+'\n'))" ;;
   kit)
     # The Guppy Plan Kit: inline CSS + decision-widget JS, single-sourced from the fork.
     # Paste the CSS into <head> and the JS before </body>; build with gk- classes.
@@ -50,7 +59,7 @@ case "$cmd" in
   poll|note|end|stop|export|share|playbook|design|update)
     exec lavish-axi "$@" 2> >(rewrite >&2) | rewrite ;;
   ""|-h|--help)
-    echo "usage: guppy-lavish <file.html> [--force] | check <file.html> | poll <file.html> | note <file.html> \"…\" | end <file.html> | stop | kit"; exit 0 ;;
+    echo "usage: guppy-lavish new <file.html> [--title …] | classes | <file.html> [--force] | check <file.html> | poll <file.html> | note <file.html> \"…\" | end <file.html> | stop | kit"; exit 0 ;;
   *)
     # open/resume: pre-flight first so broken layout never reaches the reviewer's device.
     args=(); force=0

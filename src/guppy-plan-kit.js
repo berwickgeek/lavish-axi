@@ -200,6 +200,68 @@ export const GUPPY_PLAN_KIT_DECISION_JS = `<script>
 })();
 </script>`;
 
+/**
+ * The ~25-line class vocabulary — everything an author needs to BUILD with the Kit
+ * without ever reading the CSS. `guppy-lavish classes` prints this; agents should
+ * consult it instead of `guppy-lavish kit` (10KB the author never needs in context).
+ */
+export const GUPPY_PLAN_KIT_CHEATSHEET = `Guppy Plan Kit — class vocabulary (the CSS/JS already ships inside a scaffolded page; never read it)
+
+layout    .gk-wrap page container (add .narrow for 680px)
+masthead  .gk-masthead > .gk-dot + h1.gk-title ; then p.gk-lede (intro; <b> for emphasis)
+section   .gk-h2 — uppercase section label
+card      .gk-card > h3 + p
+phase     .gk-phase > .gk-phead (.gk-pnum + h3.gk-ptitle) + p.gk-lead + ul.gk-steps > li + .gk-dod (<b>DoD</b> …)
+callout   .gk-callout.info|.warn|.risk > p.gk-ch (its heading) + text
+tag       span.gk-tag [.ok|.warn|.risk]
+table     .gk-scroll > table.gk-table — ALWAYS wrap tables in .gk-scroll, never let the page scroll sideways
+tiles     .gk-tiles > .gk-tile > .gk-val + .gk-lbl (KPI row)
+chips     .gk-chips > .gk-chip > b + span
+columns   .gk-cols — auto 2-col grid (e.g. add/remove lists)
+figure    .gk-figure > img + .gk-cap — embed real screenshots, don't describe UI in prose
+code      .gk-code > pre (block) ; inline <code> (long URLs/paths go here — wraps anywhere)
+footer    .gk-footer
+
+decision  .gk-decide > p.gk-q ("Question" [+ span.gk-rec "recommended"]) + .gk-choices
+            each option: label.gk-choice > span.gk-pick > input[type=radio name=qN value=… data-label="…"]
+                         + span.gk-ct (title) + span.gk-cd (desc), then details.gk-explain > summary "explain" + p
+            plus: a dashed label.gk-choice.none variant, an input.gk-custom (add-your-own box),
+            and one .gk-qbar > button.gk-send[data-q="qN"] "Send" + span.gk-hint per question
+          The scaffold's JS wires .gk-send to Lavish chat automatically.
+
+rules     radios/controls stay in normal flow (never position:absolute); light theme only; no CDN.`;
+
+/**
+ * A complete, ready-to-open Kit page with the body left empty between
+ * `gk-body` markers. `guppy-lavish new <file>` writes this to disk so the
+ * CSS/JS never has to pass through the authoring agent's context — the agent
+ * only ever writes/edits the body between the markers.
+ */
+export function guppyPlanKitScaffold({ title = "Plan", lede = "", footer = "" } = {}) {
+  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(title)}</title>
+${GUPPY_PLAN_KIT_CSS}
+</head>
+<body>
+<div class="gk-wrap">
+<header class="gk-masthead"><div class="gk-dot"></div><h1 class="gk-title">${esc(title)}</h1></header>
+${lede ? `<p class="gk-lede">${esc(lede)}</p>` : ""}
+<!-- gk-body:start (write the plan between these markers; leave everything outside them alone) -->
+
+<!-- gk-body:end -->
+${footer ? `<footer class="gk-footer">${esc(footer)}</footer>` : ""}
+</div>
+${GUPPY_PLAN_KIT_DECISION_JS}
+</body>
+</html>
+`;
+}
+
 /** One-line reminders that encode the overflow lessons the audit taught us. */
 export const GUPPY_PLAN_KIT_RULES = [
   "Inline GUPPY_PLAN_KIT_CSS once at the top of <head>; use gk- classes, no CDN, no network.",
